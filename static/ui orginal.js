@@ -13,6 +13,7 @@ const scramjet = new ScramjetController({
 		sourcemaps: true,
 	},
 });
+
 scramjet.init();
 navigator.serviceWorker.register("./sw.js");
 
@@ -115,36 +116,40 @@ function Config() {
 }
 
 function BrowserApp() {
-	// --- STYLES ---
 	this.css = `
-    /* These styles apply to the component's root div */
     width: 100%;
     height: 100%;
     color: #e0def4;
+    display: flex;
+    flex-direction: column;
+    padding: 0.5em;
+    padding-top: 0;
     box-sizing: border-box;
 
-    a { color: #e0def4; }
-    input, button {
-      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    a {
+      color: #e0def4;
+    }
+
+    input,
+    button {
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+        sans-serif;
+    }
+    .version {
     }
     h1 {
-      font-family: "Inter Tight", "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: "Inter Tight", "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+      sans-serif;
       margin-bottom: 0;
     }
     iframe {
       background-color: #fff;
       border: none;
-      flex: 1; /* Makes the iframe fill the space */
+      border-radius: 0.3em;
+      flex: 1;
       width: 100%;
     }
 
-    /* --- Styles for Browsing Mode --- */
-    .browsing-container {
-      display: flex; /* Toggled by style binding */
-      flex-direction: column;
-      width: 100%;
-      height: 100%;
-    }
     input.bar {
       font-family: "Inter";
       padding: 0.1em;
@@ -155,17 +160,28 @@ function BrowserApp() {
       height: 1.5em;
       border-radius: 0.3em;
       flex: 1;
+
       background-color: #121212;
       border: 1px solid #313131;
     }
+    .input_row > label {
+      font-size: 0.7rem;
+      color: gray;
+    }
+    p {
+      margin: 0;
+      margin-top: 0.2em;
+    }
+
     .nav {
-      display: flex; /* This is new */
-      padding: 0.5em;
       padding-top: 0.3em;
       padding-bottom: 0.3em;
       gap: 0.3em;
-      background-color: #1f1f1f;
     }
+    spacer {
+      margin-left: 10em;
+    }
+
     .nav button {
       color: #fff;
       outline: none;
@@ -174,166 +190,75 @@ function BrowserApp() {
       background-color: #121212;
       border: 1px solid #313131;
     }
-
-    /* --- Styles for Homepage Mode --- */
-    .homepage-container {
-      display: flex; /* Toggled by style binding */
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      height: 100%;
-      color: #000;
-      background-color: #fff;
-    }
-    .homepage-container h1 {
-      font-weight: 600;
-      font-size: 3.5rem;
-      margin: 0 0 0.5rem 0;
-    }
-    input.homepage-bar {
-      width: 100%;
-      max-width: 580px;
-      padding: 0.75em 1.25em;
-      font-size: 1rem;
-      background-color: #f0f0f0;
-      border: 1px solid #ddd;
-      border-radius: 1.5em;
-      color: #000;
-      outline: none;
-      box-sizing: border-box;
-    }
-    input.homepage-bar:focus {
-      border-color: #4c8bf5;
-    }
-    .visited-container {
-      display: flex;
-      justify-content: center;
-      gap: 1.5rem;
-      margin-top: 2.5rem;
-    }
-    .visited-box {
-      width: 110px;
-      height: 90px;
-      background-color: #f0f0f0;
-      border: 1px solid #ddd;
-      border-radius: 0.75em;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 0.9rem;
-      cursor: pointer;
-    }
   `;
+	this.url = store.url;
 
-	// --- Component State ---
-	store.isBrowsing = false; // Start on the homepage
 	const frame = scramjet.createFrame();
 
-	// --- Frame Event Listener ---
+	this.mount = () => {
+		let body = btoa(
+			`<body style="background: #000; color: #fff"><!--Welcome to <i>Scramjet</i>! Type in a URL in the omnibox above and press enter to get started.-->
+			<input class="bar" autocomplete="off" autocapitalize="off" autocorrect="off"
+        bind:value=${use(this.url)} on:input=${(e) => {
+					this.url = e.target.value;
+				}} on:keyup=${(e) => e.keyCode == 13 && (store.url = this.url) && handleSubmit()}></input>
+
+
+</body>`
+
+		);
+		frame.go(`data:text/html;base64,${body}`);
+	};
+
 	frame.addEventListener("urlchange", (e) => {
 		if (!e.url) return;
-		store.url = e.url; // Update the top bar text
+		this.url = e.url;
 	});
 
-	// --- Universal Navigation Function ---
-	const navigate = (urlToLoad) => {
-		urlToLoad = (urlToLoad || "").trim();
-		if (!urlToLoad) return; // Do nothing if empty
-
-		const isUrl =
-			urlToLoad.startsWith("http") ||
-			urlToLoad.startsWith("file:") ||
-			urlToLoad.startsWith("about:") ||
-			urlToLoad.includes(".");
-
-		let finalUrl;
-		if (isUrl) {
-			// Check if it's a URL that's missing a protocol
-			if (
-				!urlToLoad.startsWith("http://") &&
-				!urlToLoad.startsWith("https://") &&
-				!urlToLoad.startsWith("file:") &&
-				!urlToLoad.startsWith("about:")
-			) {
-				// It's a URL like "google.com", so prepend "https://"
-				finalUrl = "https://" + urlToLoad;
-			} else {
-				// It's a URL that *already* has a protocol (like https://, http://, file:, about:)
-				finalUrl = urlToLoad;
-			}
-		} else {
-			// It's a search term
-			finalUrl = `https://www.google.com/search?q=${encodeURIComponent(
-				urlToLoad
-			)}`;
+	const handleSubmit = () => {
+		this.url = this.url.trim();
+		//  frame.go(this.url)
+		if (!this.url.startsWith("http")) {
+			this.url = "https://" + this.url;
 		}
 
-		store.url = finalUrl;
-		store.isBrowsing = true; // *** THIS SWITCHES THE VIEW ***
-		return frame.go(finalUrl);
+		return frame.go(this.url);
 	};
 
-	// --- "Go Home" Function ---
-	const goHome = () => {
-		store.isBrowsing = false; // *** THIS SWITCHES THE VIEW ***
-		store.url = "";
-		frame.go("about:blank"); // Load blank page in hidden iframe
-	};
-
-	// --- Config Dialog ---
 	const cfg = h(Config);
 	document.body.appendChild(cfg);
+	// this.githubURL = `https://github.com/MercuryWorkshop/scramjet/commit/${$scramjetVersion.build}`;
 
-	// --- THE RENDER FUNCTION ---
 	return html`
-    <div style="width: 100%; height: 100%;">
+      <div>
+      <div class=${[flex, "nav"]}>
 
-      <div class="homepage-container" style=${use(
-				store.isBrowsing,
-				(is) => (is ? "display: none;" : "display: flex;")
-			)}>
-        <h1>Freedom Browser</h1>
+        <button on:click=${() => cfg.showModal()}>config</button>
+        <button on:click=${() => frame.back()}>&lt;-</button>
+        <button on:click=${() => frame.forward()}>-&gt;</button>
+        <button on:click=${() => frame.reload()}>&#x21bb;</button>
 
-        <input class="homepage-bar" autocomplete="off" placeholder="Search the web"
-          on:keyup=${(e) => e.keyCode == 13 && navigate(e.target.value)}
-        ></input>
+        <input class="bar" autocomplete="off" autocapitalize="off" autocorrect="off"
+        bind:value=${use(this.url)} on:input=${(e) => {
+					this.url = e.target.value;
+				}} on:keyup=${(e) => e.keyCode == 13 && (store.url = this.url) && handleSubmit()}></input>
 
+        <button on:click=${() => window.open(scramjet.encodeUrl(this.url))}>open</button>
 
+        <!--<p class="version">
+          <b>scramjet</b> ${$scramjetVersion.version} <a href=${use(this.githubURL)}>${$scramjetVersion.build}</a>
+        </p>-->
       </div>
-
-      <div class="browsing-container" style=${use(
-				store.isBrowsing,
-				(is) => (is ? "display: flex;" : "display: none;")
-			)}>
-        <div class="nav">
-          <button on:click=${goHome}>&#8962;</button> <button on:click=${() => cfg.showModal()}>config</button>
-          <button on:click=${() => frame.back()}>&lt;-</button>
-          <button on:click=${() => frame.forward()}>-&gt;</button>
-          <button on:click=${() => frame.reload()}>&#x21bb;</button>
-
-          <input class="bar" autocomplete="off"
-            bind:value=${use(store.url)}
-            on:input=${(e) => (store.url = e.target.value)}
-            on:keyup=${(e) => e.keyCode == 13 && navigate(store.url)}
-          ></input>
-
-          <button on:click=${() => window.open(scramjet.encodeUrl(store.url))}>open</button>
-        </div>
-        ${frame.frame} </div>
-
+      ${frame.frame}
     </div>
-  `;
+    `;
 }
-
 window.addEventListener("load", async () => {
 	const root = document.getElementById("app");
 	try {
 		root.replaceWith(h(BrowserApp));
 	} catch (e) {
-		root.replaceWith(
-			document.createTextNode("Error loading app: " + e.message)
-		);
+		root.replaceWith(document.createTextNode("" + e));
 		throw e;
 	}
 	function b64(buffer) {
